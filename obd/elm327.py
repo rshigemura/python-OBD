@@ -51,7 +51,7 @@ class ELM327:
     """
 
     _SUPPORTED_PROTOCOLS = {
-        #"0" : None, # automatic mode
+        "0" : None, # automatic mode
         "1" : SAE_J1850_PWM,
         "2" : SAE_J1850_VPW,
         "3" : ISO_9141_2,
@@ -126,10 +126,10 @@ class ELM327:
             return
 
 
-        # ---------------------- ATSPA8 (protocol AUTO) -----------------------
-        r = self.__send("ATSPA8")
+        # ---------------------- ATSP0 (protocol AUTO) -----------------------
+        r = self.__send("ATSP0")
         if not self.__isok(r):
-            self.__error("ATSPA8 did not return 'OK'")
+            self.__error("ATSP0 did not return 'OK'")
             return
 
 
@@ -152,11 +152,12 @@ class ELM327:
         p = p[1:] if (len(p) > 1 and p.startswith("A")) else p[:-1]
 
         if p not in self._SUPPORTED_PROTOCOLS:
-            self.__error("ELM responded with unknown protocol")
+            self.__error("ELM responded with unknown protocol ")
             return
 
         # instantiate the correct protocol handler
         self.__protocol = self._SUPPORTED_PROTOCOLS[p]()
+        #print p
 
         # Now that a protocol has been selected, we can figure out
         # which ECU is the primary.
