@@ -10,7 +10,7 @@
 #                                                                      #
 ########################################################################
 #                                                                      #
-# protocols/__init__.py                                                #
+# protocols/protocol_legacy.py                                         #
 #                                                                      #
 # This file is part of python-OBD (a derivative of pyOBD)              #
 #                                                                      #
@@ -29,18 +29,21 @@
 #                                                                      #
 ########################################################################
 
-from .protocol import ECU
 
-from .protocol_unknown import UnknownProtocol
+from .protocol import *
 
-from .protocol_legacy import SAE_J1850_PWM, \
-                             SAE_J1850_VPW, \
-                             ISO_9141_2, \
-                             ISO_14230_4_5baud, \
-                             ISO_14230_4_fast
 
-from .protocol_can import ISO_15765_4_11bit_500k, \
-                          ISO_15765_4_29bit_500k, \
-                          ISO_15765_4_11bit_250k, \
-                          ISO_15765_4_29bit_250k, \
-                          SAE_J1939
+class UnknownProtocol(Protocol):
+
+    """
+        Class representing an unknown protocol.
+
+        Used for when a connection to the ELM has
+        been made, but the car hasn't responded.
+    """
+
+    def parse_frame(self, frame):
+        return True # pass everything
+
+    def parse_message(self, message):
+        return True # pass everything

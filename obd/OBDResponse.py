@@ -10,7 +10,7 @@
 #                                                                      #
 ########################################################################
 #                                                                      #
-# protocols/__init__.py                                                #
+# OBDResponse.py                                                       #
 #                                                                      #
 # This file is part of python-OBD (a derivative of pyOBD)              #
 #                                                                      #
@@ -29,18 +29,80 @@
 #                                                                      #
 ########################################################################
 
-from .protocol import ECU
 
-from .protocol_unknown import UnknownProtocol
 
-from .protocol_legacy import SAE_J1850_PWM, \
-                             SAE_J1850_VPW, \
-                             ISO_9141_2, \
-                             ISO_14230_4_5baud, \
-                             ISO_14230_4_fast
+import time
 
-from .protocol_can import ISO_15765_4_11bit_500k, \
-                          ISO_15765_4_29bit_500k, \
-                          ISO_15765_4_11bit_250k, \
-                          ISO_15765_4_29bit_250k, \
-                          SAE_J1939
+
+
+class Unit:
+    """ All unit constants used in python-OBD """
+
+    NONE    = None
+    RATIO   = "Ratio"
+    COUNT   = "Count"
+    PERCENT = "%"
+    RPM     = "RPM"
+    VOLT    = "Volt"
+    F       = "F"
+    C       = "C"
+    SEC     = "Second"
+    MIN     = "Minute"
+    PA      = "Pa"
+    KPA     = "kPa"
+    PSI     = "psi"
+    KPH     = "kph"
+    MPH     = "mph"
+    DEGREES = "Degrees"
+    GPS     = "Grams per Second"
+    MA      = "mA"
+    KM      = "km"
+    LPH     = "Liters per Hour"
+
+
+
+class OBDResponse():
+    """ Standard response object for any OBDCommand """
+
+    def __init__(self, command=None, messages=None):
+        self.command  = command
+        self.messages = messages if messages else []
+        self.value    = None
+        self.unit     = Unit.NONE
+        self.time     = time.time()
+
+    def is_null(self):
+        return (not self.messages) or (self.value == None)
+
+    def __str__(self):
+        if self.unit != Unit.NONE:
+            return "%s %s" % (str(self.value), str(self.unit))
+        else:
+            return str(self.value)
+
+
+
+"""
+    Special value types used in OBDResponses
+    instantiated in decoders.py
+"""
+
+
+class Status():
+    def __init__(self):
+        self.MIL           = False
+        self.DTC_count     = 0
+        self.ignition_type = ""
+        self.tests         = []
+
+
+class Test():
+    def __init__(self, name, available, incomplete):
+        self.name       = name
+        self.available  = available
+        self.incomplete = incomplete
+
+    def __str__(self):
+        a = "Available" if self.available else "Unavailable"
+        c = "Incomplete" if self.incomplete else "Complete"
+        return "Test %s: %s, %s" % (self.name, a, c)

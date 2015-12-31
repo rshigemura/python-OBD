@@ -17,10 +17,17 @@ setup(
         "Topic :: System :: Logging",
         "Intended Audience :: Developers",
     ],
+<<<<<<< HEAD
     keywords="obd obd-II obd-ii obd2 car serial vehicle diagnostic",
     author="Rafael Shigemura",
     author_email="rafael.shigemura@gmail.com",
     url="http://github.com/rshigemura/python-OBD",
+=======
+    keywords="obd obdii obd-ii obd2 car serial vehicle diagnostic",
+    author="Brendan Whitfield",
+    author_email="brendanw@windworksdesign.com",
+    url="http://github.com/brendanwhitfield/python-OBD",
+>>>>>>> 9259f062dcb8707838b1e1f6f13f11aff6224a8b
     license="GNU GPLv2",
     packages=find_packages(),
     include_package_data=True,

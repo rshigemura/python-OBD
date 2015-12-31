@@ -33,21 +33,24 @@ import re
 import serial
 import time
 from .protocols import *
-from .utils import numBitsSet
+from .utils import OBDStatus, numBitsSet
 from .debug import debug
 
 
 
 class ELM327:
     """
-        Provides interface for the vehicles primary ECU.
+        Handles communication with the ELM327 adapter.
+
         After instantiation with a portname (/dev/ttyUSB0, etc...),
         the following functions become available:
 
             send_and_parse()
-            get_port_name()
-            is_connected()
             close()
+            status()
+            port_name()
+            protocol_name()
+            ecus()
     """
 
     _SUPPORTED_PROTOCOLS = {
@@ -66,25 +69,39 @@ class ELM327:
         #"C" : None, # user defined 2
     }
 
-    def __init__(self, portname, baudrate):
+    # used as a fallback, when ATSP0 doesn't cut it
+    _TRY_PROTOCOL_ORDER = [
+        "6", # ISO_15765_4_11bit_500k
+        "8", # ISO_15765_4_11bit_250k
+        "1", # SAE_J1850_PWM
+        "7", # ISO_15765_4_29bit_500k
+        "9", # ISO_15765_4_29bit_250k
+        "2", # SAE_J1850_VPW
+        "3", # ISO_9141_2
+        "4", # ISO_14230_4_5baud
+        "5", # ISO_14230_4_fast
+        "A", # SAE_J1939
+    ]
+
+
+    def __init__(self, portname, baudrate, protocol):
         """Initializes port by resetting device and gettings supported PIDs. """
 
-        self.__connected   = False
-        self.__port        = None
-        self.__protocol    = None
-        self.__primary_ecu = None # message.tx_id
+        self.__status   = OBDStatus.NOT_CONNECTED
+        self.__port     = None
+        self.__protocol = UnknownProtocol([])
+
 
         # ------------- open port -------------
-
-        debug("Opening serial port '%s'" % portname)
-
         try:
+            debug("Opening serial port '%s'" % portname)
             self.__port = serial.Serial(portname, \
-                                      baudrate = baudrate, \
-                                      parity   = serial.PARITY_NONE, \
-                                      stopbits = 1, \
-                                      bytesize = 8, \
-                                      timeout  = 3) # seconds
+                                        baudrate = baudrate, \
+                                        parity   = serial.PARITY_NONE, \
+                                        stopbits = 1, \
+                                        bytesize = 8, \
+                                        timeout  = 3) # seconds
+            debug("Serial port successfully opened on " + self.port_name())
 
         except serial.SerialException as e:
             self.__error(e)
@@ -92,8 +109,6 @@ class ELM327:
         except OSError as e:
             self.__error(e)
             return
-
-        debug("Serial port successfully opened on " + self.get_port_name())
 
 
         # ---------------------------- ATZ (reset) ----------------------------
@@ -104,13 +119,11 @@ class ELM327:
             self.__error(e)
             return
 
-
         # -------------------------- ATE0 (echo OFF) --------------------------
         r = self.__send("ATE0")
         if not self.__isok(r, expectEcho=True):
             self.__error("ATE0 did not return 'OK'")
             return
-
 
         # ------------------------- ATH1 (headers ON) -------------------------
         r = self.__send("ATH1")
@@ -118,38 +131,63 @@ class ELM327:
             self.__error("ATH1 did not return 'OK', or echoing is still ON")
             return
 
-
         # ------------------------ ATL0 (linefeeds OFF) -----------------------
         r = self.__send("ATL0")
         if not self.__isok(r):
             self.__error("ATL0 did not return 'OK'")
             return
 
+        # by now, we've successfuly communicated with the ELM, but not the car
+        self.__status = OBDStatus.ELM_CONNECTED
 
+<<<<<<< HEAD
         # ---------------------- ATSP0 (protocol AUTO) -----------------------
         r = self.__send("ATSP0")
         if not self.__isok(r):
             self.__error("ATSP0 did not return 'OK'")
             return
+=======
+        # try to communicate with the car, and load the correct protocol parser
+        if self.load_protocol():
+            self.__status = OBDStatus.CAR_CONNECTED
+            debug("Connection successful")
+        else:
+            debug("Connected to the adapter, but failed to connect to the vehicle", True)
+>>>>>>> 9259f062dcb8707838b1e1f6f13f11aff6224a8b
 
+
+
+    def load_protocol(self):
+        """
+            Attempts communication with the car.
+
+            If no protocol is specified, then protocols at tried with `ATTP`
+
+            Upon success, the appropriate protocol parser is loaded,
+            and this function returns True
+        """
+
+        # -------------- try the ELM's auto protocol mode --------------
+        r = self.__send("ATSP0")
 
         # -------------- 0100 (first command, SEARCH protocols) --------------
-        # TODO: rewrite this using a "wait for prompt character"
-        # rather than a fixed wait period
         r0100 = self.__send("0100")
 
+<<<<<<< HEAD
         print r0100 # remove this line later
 
+=======
+>>>>>>> 9259f062dcb8707838b1e1f6f13f11aff6224a8b
         # ------------------- ATDPN (list protocol number) -------------------
         r = self.__send("ATDPN")
+        if len(r) != 1:
+            debug("Failed to retrieve current protocol", True)
+            return False
 
-        if not r:
-            self.__error("Describe protocol command didn't return ")
-            return
 
-        p = r[0]
-
+        p = r[0] # grab the first (and only) line returned
         # suppress any "automatic" prefix
+<<<<<<< HEAD
         p = p[1:] if (len(p) > 1 and p.startswith("A")) else p[:-1]
 
         if p not in self._SUPPORTED_PROTOCOLS:
@@ -159,131 +197,119 @@ class ELM327:
         # instantiate the correct protocol handler
         self.__protocol = self._SUPPORTED_PROTOCOLS[p]()
         #print p
+=======
+        p = p[1:] if (len(p) > 1 and p.startswith("A")) else p
 
-        # Now that a protocol has been selected, we can figure out
-        # which ECU is the primary.
+        # check if the protocol is something we know
+        if p in self._SUPPORTED_PROTOCOLS:
+            # jackpot, instantiate the corresponding protocol handler
+            self.__protocol = self._SUPPORTED_PROTOCOLS[p](r0100)
+            return True
+        else:
+            # an unknown protocol
+            # this is likely because not all adapter/car combinations work
+            # in "auto" mode. Some respond to ATDPN responded with "0"
+            debug("ELM responded with unknown protocol. Trying them one-by-one")
+>>>>>>> 9259f062dcb8707838b1e1f6f13f11aff6224a8b
 
-        m = self.__protocol(r0100)
-        self.__primary_ecu = self.__find_primary_ecu(m)
-        if self.__primary_ecu is None:
-            self.__error("Failed to choose primary ECU")
-            return
+            for p in self._TRY_PROTOCOL_ORDER:
+                r = self.__send("ATTP%s" % p)
+                r0100 = self.__send("0100")
+                if not self.__has_message(r0100, "UNABLE TO CONNECT"):
+                    # success, found the protocol
+                    self.__protocol = self._SUPPORTED_PROTOCOLS[p](r0100)
+                    return True
 
-        # ------------------------------- done -------------------------------
-        debug("Connection successful")
-        self.__connected = True
+        # if we've come this far, then we have failed...
+        return False
+
 
 
     def __isok(self, lines, expectEcho=False):
         if not lines:
             return False
         if expectEcho:
-            return len(lines) == 2 and lines[1] == 'OK'
+            # don't test for the echo itself
+            # allow the adapter to already have echo disabled
+            return self.__has_message(lines, 'OK')
         else:
             return len(lines) == 1 and lines[0] == 'OK'
 
 
-    def __find_primary_ecu(self, messages):
-        """
-            Given a list of messages from different ECUS,
-            (in response to the 0100 PID listing command)
-            choose the ID of the primary ECU
-        """
-
-        if len(messages) == 0:
-            return None
-        elif len(messages) == 1:
-            return messages[0].tx_id
-        else:
-            # first, try filtering for the standard ECU IDs
-            test = lambda m: m.tx_id == self.__protocol.PRIMARY_ECU
-
-            if bool([m for m in messages if test(m)]):
-                return self.__protocol.PRIMARY_ECU
-            else:
-                # last resort solution, choose ECU
-                # with the most PIDs supported
-                best = 0
-                tx_id = None
-
-                for message in messages:
-                    bits = sum([numBitsSet(b) for b in message.data_bytes])
-
-                    if bits > best:
-                        best = bits
-                        tx_id = message.tx_id
-
-                return tx_id
+    def __has_message(self, lines, text):
+        for line in lines:
+            if text in line:
+                return True
+        return False
 
 
     def __error(self, msg=None):
         """ handles fatal failures, print debug info and closes serial """
-        
-        debug("Connection Error:", True)
 
+        self.close()
+
+        debug("Connection Error:", True)
         if msg is not None:
             debug('    ' + str(msg), True)
 
+
+    def port_name(self):
         if self.__port is not None:
-            self.__port.close()
-
-        self.__connected = False
-
-
-    def get_port_name(self):
-        return self.__port.portstr if (self.__port is not None) else "No Port"
+            return self.__port.portstr
+        else:
+            return "No Port"
 
 
-    def is_connected(self):
-        return self.__connected and (self.__port is not None)
+    def status(self):
+        return self.__status
+
+
+    def ecus(self):
+        return self.__protocol.ecu_map.values()
+
+
+    def protocol_name(self):
+        return self.__protocol.ELM_NAME
+
+
+    def protocol_id(self):
+        return self.__protocol.ELM_ID
 
 
     def close(self):
         """
-            Resets the device, and clears all attributes to unconnected state
+            Resets the device, and sets all
+            attributes to unconnected states.
         """
 
-        if self.is_connected():
+        self.__status   = OBDStatus.NOT_CONNECTED
+        self.__protocol = None
+
+        if self.__port is not None:
             self.__write("ATZ")
             self.__port.close()
-
-            self.__connected   = False
-            self.__port        = None
-            self.__protocol    = None
-            self.__primary_ecu = None
+            self.__port = None
 
 
-    def send_and_parse(self, cmd, delay=None):
+    def send_and_parse(self, cmd):
         """
             send() function used to service all OBDCommands
 
-            Sends the given command string (rejects "AT" command),
-            parses the response string with the appropriate protocol object.
+            Sends the given command string, and parses the
+            response lines with the protocol object.
 
-            Returns the Message object from the primary ECU, or None,
-            if no appropriate response was recieved.
+            An empty command string will re-trigger the previous command
+
+            Returns a list of Message objects
         """
 
-        if not self.is_connected():
+        if self.__status == OBDStatus.NOT_CONNECTED:
             debug("cannot send_and_parse() when unconnected", True)
             return None
 
-        if "AT" in cmd.upper():
-            debug("Rejected sending AT command", True)
-            return None
-
-        lines = self.__send(cmd, delay)
-
-        # parses string into list of messages
+        lines = self.__send(cmd)
         messages = self.__protocol(lines)
-
-        # select the first message with the ECU ID we're looking for
-        # TODO: use ELM header settings to query ECU by address directly
-        for message in messages:
-            if message.tx_id == self.__primary_ecu:
-                return message
-
-        return None # no suitable response was returned
+        return messages
 
 
     def __send(self, cmd, delay=None):
@@ -291,7 +317,8 @@ class ELM327:
             unprotected send() function
 
             will __write() the given string, no questions asked.
-            returns result of __read() after an optional delay.
+            returns result of __read() (a list of line strings)
+            after an optional delay.
         """
 
         self.__write(cmd)
@@ -337,10 +364,10 @@ class ELM327:
                 if not c:
 
                     if attempts <= 0:
-                        debug("__read() never recieved prompt character")
+                        debug("Failed to read port, giving up")
                         break
 
-                    debug("__read() found nothing")
+                    debug("Failed to read port, trying again...")
                     attempts -= 1
                     continue
 
