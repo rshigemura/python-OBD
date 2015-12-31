@@ -138,6 +138,7 @@ class ELM327:
         # rather than a fixed wait period
         r0100 = self.__send("0100")
 
+        print r0100 # remove this line later
 
         # ------------------- ATDPN (list protocol number) -------------------
         r = self.__send("ATDPN")
