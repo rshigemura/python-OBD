@@ -140,20 +140,18 @@ class ELM327:
         # by now, we've successfuly communicated with the ELM, but not the car
         self.__status = OBDStatus.ELM_CONNECTED
 
-<<<<<<< HEAD
         # ---------------------- ATSP0 (protocol AUTO) -----------------------
         r = self.__send("ATSP0")
         if not self.__isok(r):
             self.__error("ATSP0 did not return 'OK'")
             return
-=======
+
         # try to communicate with the car, and load the correct protocol parser
         if self.load_protocol():
             self.__status = OBDStatus.CAR_CONNECTED
             debug("Connection successful")
         else:
             debug("Connected to the adapter, but failed to connect to the vehicle", True)
->>>>>>> 9259f062dcb8707838b1e1f6f13f11aff6224a8b
 
 
 
@@ -173,11 +171,8 @@ class ELM327:
         # -------------- 0100 (first command, SEARCH protocols) --------------
         r0100 = self.__send("0100")
 
-<<<<<<< HEAD
         print r0100 # remove this line later
 
-=======
->>>>>>> 9259f062dcb8707838b1e1f6f13f11aff6224a8b
         # ------------------- ATDPN (list protocol number) -------------------
         r = self.__send("ATDPN")
         if len(r) != 1:
@@ -187,7 +182,6 @@ class ELM327:
 
         p = r[0] # grab the first (and only) line returned
         # suppress any "automatic" prefix
-<<<<<<< HEAD
         p = p[1:] if (len(p) > 1 and p.startswith("A")) else p[:-1]
 
         if p not in self._SUPPORTED_PROTOCOLS:
@@ -197,7 +191,6 @@ class ELM327:
         # instantiate the correct protocol handler
         self.__protocol = self._SUPPORTED_PROTOCOLS[p]()
         #print p
-=======
         p = p[1:] if (len(p) > 1 and p.startswith("A")) else p
 
         # check if the protocol is something we know
@@ -210,7 +203,6 @@ class ELM327:
             # this is likely because not all adapter/car combinations work
             # in "auto" mode. Some respond to ATDPN responded with "0"
             debug("ELM responded with unknown protocol. Trying them one-by-one")
->>>>>>> 9259f062dcb8707838b1e1f6f13f11aff6224a8b
 
             for p in self._TRY_PROTOCOL_ORDER:
                 r = self.__send("ATTP%s" % p)
